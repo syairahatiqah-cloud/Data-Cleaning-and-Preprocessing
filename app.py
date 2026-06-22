@@ -1,4 +1,4 @@
-# app.py
+# app22062026.py
 # ============================================================
 # Streamlit App: FSM Imputation for WL/SF (Upload File Only)
 # - Upload Excel/CSV
@@ -76,32 +76,69 @@ def line_png_bytes(
     return buf.getvalue()
 
 
-def bar_png_bytes(x, y, title, xlab, ylab, figsize=(12, 4), rotate_xticks=45, show_value_labels=False):
+def bar_png_bytes(
+    x, y, title, xlab, ylab,
+    figsize=None,
+    rotate_xticks=45,
+    show_value_labels=False,
+    max_xticks=24,
+    label_min_value=0.05
+):
+    """
+    Create a cleaner bar PNG for monthly/yearly missing summaries.
+
+    Fixes overcrowding when many Year-Month bars exist by:
+    1) increasing figure width automatically,
+    2) showing only a limited number of x-axis tick labels,
+    3) labelling only non-zero / meaningful missing percentages.
+    """
+    x = list(x)
+    y = np.asarray(y, dtype=float)
+    n = len(x)
+
+    if figsize is None:
+        # Dynamic width: enough space for many months, capped to avoid huge PNGs.
+        width = min(max(12, n * 0.18), 28)
+        figsize = (width, 4.8)
+
     fig, ax = plt.subplots(figsize=figsize)
-    bars = ax.bar(x, y)
+    bars = ax.bar(range(n), y)
+
     ax.set_title(title)
     ax.set_xlabel(xlab)
     ax.set_ylabel(ylab)
     ax.grid(True, axis="y", alpha=0.3)
+    ax.set_ylim(0, min(110, max(105, np.nanmax(y) + 8 if len(y) else 105)))
 
-    # ✅ Add value labels on bars (Missing %)
+    # ✅ Add labels only for non-zero / meaningful Missing % values.
+    # This avoids hundreds of overlapping "0.0%" labels.
     if show_value_labels:
-        for b in bars:
-            h = b.get_height()
-            if np.isnan(h):
+        for b, h in zip(bars, y):
+            if np.isnan(h) or h < label_min_value:
                 continue
             ax.text(
                 b.get_x() + b.get_width() / 2,
-                h,
+                h + 1,
                 f"{h:.1f}%",
                 ha="center",
                 va="bottom",
-                fontsize=9
+                fontsize=8,
+                rotation=90 if n > 36 else 0
             )
 
-    for tick in ax.get_xticklabels():
-        tick.set_rotation(rotate_xticks)
-        tick.set_ha("right")
+    # ✅ Reduce crowded Year-Month tick labels.
+    if n == 0:
+        tick_idx = []
+    elif n <= max_xticks:
+        tick_idx = list(range(n))
+    else:
+        step = int(np.ceil(n / max_xticks))
+        tick_idx = list(range(0, n, step))
+        if (n - 1) not in tick_idx:
+            tick_idx.append(n - 1)
+
+    ax.set_xticks(tick_idx)
+    ax.set_xticklabels([x[i] for i in tick_idx], rotation=rotate_xticks, ha="right")
 
     fig.tight_layout()
     buf = io.BytesIO()
@@ -743,7 +780,9 @@ with tab2:
             title=f"Monthly Missing Data Percentage: {val_col}",
             xlab="Year-Month",
             ylab="Missing Percentage (%)",
-            show_value_labels=True
+            show_value_labels=True,
+            max_xticks=24,
+            label_min_value=0.05
         )
 
         # ✅ SHOW PNG inside app
@@ -790,7 +829,9 @@ with tab2:
             xlab="Year",
             ylab="Missing Percentage (%)",
             rotate_xticks=0,
-            show_value_labels=True
+            show_value_labels=True,
+            max_xticks=30,
+            label_min_value=0.05
         )
 
         # ✅ SHOW PNG inside app

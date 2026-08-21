@@ -445,12 +445,20 @@ def impute_series_interpolation(series: pd.Series, method: str = "linear", order
     if method == "polynomial":
         try:
             return s.interpolate(method="polynomial", order=int(order), limit_direction="both")
-        except Exception as e:
-            st.error(
-                "Polynomial interpolation failed. It may require scipy, enough non-missing data, "
-                f"or a lower polynomial order. Error: {e}"
-            )
-            return s
+except ImportError as e:
+    st.error(
+        "Polynomial interpolation requires SciPy. "
+        "Please add 'scipy' to requirements.txt and redeploy the Streamlit app."
+    )
+    return None
+
+except Exception as e:
+    st.error(
+        "Polynomial interpolation failed. "
+        "Check that there are enough valid data points and try a lower polynomial order. "
+        f"Error: {e}"
+    )
+    return None
 
     raise ValueError("method must be 'linear' or 'polynomial'")
 
@@ -568,12 +576,15 @@ def render_interpolation_tab(method_key: str, method_label: str, default_order: 
     run_interp = st.button(f"Run {method_label} Imputation", key=f"run_{method_key}")
 
     if run_interp:
-        with st.spinner(f"Running {method_label} imputation..."):
-            imputed_full = impute_series_interpolation(
-                series,
-                method=method_key,
-                order=int(poly_order)
-            )
+    with st.spinner(f"Running {method_label} imputation..."):
+        imputed_full = impute_series_interpolation(
+            series,
+            method=method_key,
+            order=int(poly_order)
+        )
+
+    if imputed_full is None:
+        st.stop()
 
         suffix = "Linear" if method_key == "linear" else f"Polynomial_Order{int(poly_order)}"
         imputed_col = f"{val_col}_{suffix}_Imputed"
